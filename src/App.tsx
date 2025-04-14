@@ -1,5 +1,7 @@
 import React, { useState, useEffect } from 'react';
-import { Clock, TrendingUp, Globe, AlertCircle, ArrowUpDown, Activity, Calendar, Info, Bell, LineChart, Settings, Volume2, Eye, EyeOff } from 'lucide-react';
+import { Clock, TrendingUp, Globe, AlertCircle, ArrowUpDown, Activity, Calendar, Info, Bell, LineChart, Settings, Volume2, Eye, EyeOff, Calendar as CalendarIcon, Zap, DollarSign } from 'lucide-react';
+import { format, addDays, isSameDay } from 'date-fns';
+import { fr } from 'date-fns/locale';
 
 function App() {
   const [parisTime, setParisTime] = useState(new Date());
@@ -14,8 +16,59 @@ function App() {
   const [soundEnabled, setSoundEnabled] = useState(false);
   const [hiddenPairs, setHiddenPairs] = useState<string[]>([]);
   const [showSettings, setShowSettings] = useState(false);
+  const [notifications, setNotifications] = useState<string[]>([]);
+  const [activePairs, setActivePairs] = useState<Array<{pair: string, activity: number}>>([]);
+  const [spreads, setSpreads] = useState<Record<string, number>>({});
   
-  // Mise à jour de l'heure toutes les secondes
+  // Événements économiques à venir
+  const upcomingEvents = [
+    {
+      date: addDays(new Date(), 2),
+      time: '14:30',
+      title: 'Publication PIB Zone Euro',
+      impact: 'Élevé'
+    },
+    {
+      date: addDays(new Date(), 3),
+      time: '10:00',
+      title: 'Décision taux BCE',
+      impact: 'Très Élevé'
+    },
+    {
+      date: addDays(new Date(), 5),
+      time: '08:30',
+      title: 'PMI Services France',
+      impact: 'Moyen'
+    }
+  ];
+
+  // Simulation de l'activité des paires et des spreads
+  useEffect(() => {
+    const updateActivePairs = () => {
+      const pairs = ['EUR/USD', 'GBP/USD', 'EUR/GBP', 'EUR/JPY', 'USD/JPY'];
+      const newActivePairs = pairs.map(pair => ({
+        pair,
+        activity: Math.random() * 100
+      })).sort((a, b) => b.activity - a.activity);
+      setActivePairs(newActivePairs);
+
+      // Mise à jour des spreads
+      const newSpreads: Record<string, number> = {};
+      pairs.forEach(pair => {
+        const baseSpread = pair === 'EUR/JPY' ? 0.02 : 0.0001;
+        const variation = (Math.random() - 0.5) * baseSpread * 0.2;
+        newSpreads[pair] = +(baseSpread + variation).toFixed(5);
+      });
+      setSpreads(newSpreads);
+    };
+
+    const activityTimer = setInterval(updateActivePairs, 5000);
+    updateActivePairs(); // Initial update
+
+    return () => clearInterval(activityTimer);
+  }, []);
+
+  // Mise à jour de l'heure et vérification des événements
   useEffect(() => {
     const timer = setInterval(() => {
       const now = new Date();
@@ -31,6 +84,22 @@ function App() {
       };
 
       setMarketStatus(newMarketStatus);
+
+      // Vérification des événements du jour
+      const todayEvents = upcomingEvents.filter(event => 
+        isSameDay(event.date, now)
+      );
+
+      todayEvents.forEach(event => {
+        const [eventHour, eventMinute] = event.time.split(':').map(Number);
+        if (hour === eventHour && now.getMinutes() === eventMinute) {
+          const notification = `${event.title} - Impact: ${event.impact}`;
+          setNotifications(prev => [...prev, notification]);
+          if (soundEnabled) {
+            playAlertSound();
+          }
+        }
+      });
 
       // Alerte de changement de session
       if (hour === 8 || hour === 14 || hour === 0) {
@@ -217,12 +286,24 @@ function App() {
         </div>
       )}
 
-      {showAlert && (
-        <div className="fixed top-4 right-4 bg-yellow-500 text-black px-6 py-3 rounded-lg shadow-lg flex items-center gap-2 animate-bounce">
-          <Bell className="w-5 h-5" />
-          <span>Changement de session de trading !</span>
-        </div>
-      )}
+      {/* Notifications */}
+      <div className="fixed top-4 right-4 space-y-2">
+        {showAlert && (
+          <div className="bg-yellow-500 text-black px-6 py-3 rounded-lg shadow-lg flex items-center gap-2 animate-bounce">
+            <Bell className="w-5 h-5" />
+            <span>Changement de session de trading !</span>
+          </div>
+        )}
+        {notifications.map((notification, index) => (
+          <div 
+            key={index}
+            className="bg-blue-500 text-white px-6 py-3 rounded-lg shadow-lg flex items-center gap-2"
+          >
+            <AlertCircle className="w-5 h-5" />
+            <span>{notification}</span>
+          </div>
+        ))}
+      </div>
 
       <div className="container mx-auto px-4 py-8">
         <div className="max-w-4xl mx-auto">
@@ -269,6 +350,94 @@ function App() {
                 </div>
                 <div className="text-sm opacity-80">14:30 - 21:00</div>
               </div>
+            </div>
+          </div>
+
+          {/* Spreads en temps réel */}
+          <div className="bg-white/10 backdrop-blur-lg rounded-xl p-6 mb-8">
+            <h2 className="text-xl font-bold mb-6 flex items-center gap-2">
+              <DollarSign className="w-6 h-6" />
+              Spreads en temps réel
+            </h2>
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+              {Object.entries(spreads).map(([pair, spread]) => (
+                <div key={pair} className="bg-white/5 rounded-lg p-4">
+                  <div className="flex items-center justify-between">
+                    <div className="text-lg font-semibold">{pair}</div>
+                    <div className={`text-sm ${
+                      spread < 0.0003 ? 'text-green-400' : 
+                      spread < 0.0005 ? 'text-yellow-400' : 
+                      'text-red-400'
+                    }`}>
+                      {spread.toFixed(5)}
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* Paires les plus actives */}
+          <div className="bg-white/10 backdrop-blur-lg rounded-xl p-6 mb-8">
+            <h2 className="text-xl font-bold mb-6 flex items-center gap-2">
+              <Zap className="w-6 h-6" />
+              Paires les plus actives
+            </h2>
+            <div className="grid gap-4">
+              {activePairs.map((pair, index) => (
+                <div 
+                  key={pair.pair} 
+                  className={`bg-white/5 rounded-lg p-4 flex items-center justify-between ${
+                    index === 0 ? 'border-2 border-yellow-400' : ''
+                  }`}
+                >
+                  <div className="flex items-center gap-4">
+                    <span className="text-2xl font-bold">{index + 1}</span>
+                    <div>
+                      <div className="text-lg font-semibold">{pair.pair}</div>
+                      <div className="text-sm text-gray-300">
+                        Activité relative: {pair.activity.toFixed(1)}%
+                      </div>
+                    </div>
+                  </div>
+                  <div className="w-24 bg-gray-700 rounded-full h-2">
+                    <div 
+                      className="bg-blue-500 h-2 rounded-full"
+                      style={{ width: `${pair.activity}%` }}
+                    />
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* Événements à venir */}
+          <div className="bg-white/10 backdrop-blur-lg rounded-xl p-6 mb-8">
+            <h2 className="text-xl font-bold mb-6 flex items-center gap-2">
+              <CalendarIcon className="w-6 h-6" />
+              Événements à venir
+            </h2>
+            <div className="grid gap-4">
+              {upcomingEvents.map((event, index) => (
+                <div key={index} className="bg-white/5 rounded-lg p-4">
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <div className="flex items-center gap-2">
+                      <Calendar className="w-4 h-4 text-blue-400" />
+                      <div>
+                        {format(event.date, 'dd MMMM yyyy', { locale: fr })}
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <Clock className="w-4 h-4 text-green-400" />
+                      <div>{event.time}</div>
+                    </div>
+                    <div>
+                      <div className="font-semibold">{event.title}</div>
+                      <div className="text-sm text-gray-300">Impact: {event.impact}</div>
+                    </div>
+                  </div>
+                </div>
+              ))}
             </div>
           </div>
 
